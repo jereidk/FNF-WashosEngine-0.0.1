@@ -1750,9 +1750,12 @@ class PlayState extends MusicBeatState
 				openCharacterEditor();
 		}
 
-		if (healthBar.bounds.max != null && health > healthBar.bounds.max)
-			health = healthBar.bounds.max;
-
+		var targetHealth:Float = health;  
+        if (healthBar.bounds.max != null && targetHealth > healthBar.bounds.max)  
+            targetHealth = healthBar.bounds.max;  
+      
+        health = FlxMath.lerp(targetHealth, health, Math.exp(-elapsed * 8));
+				
 		updateIconsScale(elapsed);
 		updateIconsPosition();
 
