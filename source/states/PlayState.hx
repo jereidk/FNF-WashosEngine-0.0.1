@@ -3869,42 +3869,55 @@ class PlayState extends MusicBeatState
 		return false;
 	}
 
-	function checkForResync()
-	{
-		if (endingSong || paused || shutdownThread)
-			return;
-
-		if (requiresSyncing)
-		{
-			requiresSyncing = false;
-			setSongTime(lastCorrectSongPos);
-		}
-
-		gameFroze = false;
+	public function checkForResync()  
+	{  
+	    if (endingSong || paused || shutdownThread)  
+	        return;  
+	  
+	    if (requiresSyncing)  
+	    {  
+	        requiresSyncing = false;  
+	        setSongTime(lastCorrectSongPos);  
+	    }  
+	  
+	    if (FlxG.sound.music != null && FlxG.sound.music.playing)  
+	    {  
+	        var currentMusicTime:Float = FlxG.sound.music.time + Conductor.offset;  
+	        var timeDiff:Float = Math.abs(currentMusicTime - Conductor.songPosition);  
+	        var syncThreshold:Float = 50 * playbackRate;
+	          
+	        if (timeDiff > syncThreshold)  
+	        {  
+	            trace('Desincronización detectada: ${timeDiff}ms, resincronizando...');  
+	            setSongTime(currentMusicTime);  
+	        }  
+	    }  
+	  
+	    gameFroze = false;  
 	}
 
-	public function runSongSyncThread()
-	{
-		Thread.create(function()
-		{
-			while (!endingSong && !paused && !shutdownThread)
-			{
-				if (requiresSyncing)
-					continue;
-
-				if (gameFroze)
-				{
-					lastCorrectSongPos = Conductor.songPosition;
-					requiresSyncing = true;
-					continue;
-				}
-				gameFroze = true;
-
-				Sys.sleep(0.25);
-			}
-		});
-
-		if (!FlxG.signals.preUpdate.has(checkForResync))
-			FlxG.signals.preUpdate.add(checkForResync);
+    public function runSongSyncThread()  
+	{  
+	    Thread.create(function()  
+	    {  
+	        while (!endingSong && !paused && !shutdownThread)  
+	        {  
+	            if (requiresSyncing)  
+	                continue;  
+	  
+	            if (gameFroze)  
+	            {  
+	                lastCorrectSongPos = Conductor.songPosition;  
+	                requiresSyncing = true;  
+	                continue;  
+	            }  
+	            gameFroze = true;  
+	  
+	            Sys.sleep(0.1);
+	        }  
+	    });  
+	  
+	    if (!FlxG.signals.preUpdate.has(checkForResync))  
+	        FlxG.signals.preUpdate.add(checkForResync);  
 	}
 }
