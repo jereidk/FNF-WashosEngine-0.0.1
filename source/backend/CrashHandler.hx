@@ -77,6 +77,30 @@ class CrashHandler
 
 		CoolUtil.showPopUp('$m\n$stackLabel', "Error!");
 		#if DISCORD_ALLOWED DiscordClient.shutdown(); #end
+
+		#if sys  
+		try {  
+		    var crashData:Dynamic = {  
+		        timestamp: Date.now().toString(),  
+		        state: Type.getClassName(Type.getClass(FlxG.state))  
+		    };  
+		      
+		    // Solo si estamos en PlayState  
+		    if(Std.isOfType(FlxG.state, PlayState)) {  
+		        var ps:PlayState = cast FlxG.state;  
+		        crashData.song = PlayState.SONG.song;  
+		        crashData.score = ps.songScore;  
+		        crashData.misses = ps.songMisses;  
+		        crashData.health = ps.health;  
+		        crashData.songPosition = Conductor.songPosition;  
+		    }  
+		      
+		    File.saveContent('crash_log.json', haxe.Json.stringify(crashData, null, '  '));  
+		} catch(e:Dynamic) {  
+		    trace('Failed to save crash data: $e');  
+		}  
+		#end
+			
 		lime.system.System.exit(1);
 	}
 
