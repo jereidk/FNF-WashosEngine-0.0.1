@@ -1,14 +1,32 @@
-[general]
-sample-type=float32
-stereo-mode=speakers
-stereo-encoding=panpot
-hrtf=false
-cf_level=0
-resampler=fast_bsinc24
-front-stablizer=false
-output-limiter=false
-volume-adjust=0
+[general]  
+drivers = opensl,  
+
+frequency = 48000  
+
+periods = 2  
+period_size = 512  
+
+sample-type = float32  
+
+channels = stereo  
+stereo-mode = speakers  
+stereo-encoding = panpot  
+
+hrtf = false
+# Opción 1: resampler = fast_bsinc24  # Alta calidad, más CPU  
+# Opción 2: resampler = cubic  # Balance calidad/rendimiento  
+resampler = cubic  
+
+cf_level = 0  
+front-stablizer = false  
+output-limiter = false  
+volume-adjust = 0  
+  
+[opensl]
+buffer-size = 2048  
+buffers = 4  
+  
 [decoder]
-hq-mode=false
-distance-comp=false
-nfc=false
+hq-mode = false  
+distance-comp = false  
+nfc = false
