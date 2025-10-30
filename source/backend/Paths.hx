@@ -58,6 +58,8 @@ class Paths
 
 	// define the locally tracked assets
 	public static var localTrackedAssets:Array<String> = [];
+	
+	static var protectedGraphicsCache:Map<FlxGraphic, Bool> = new Map();
 
 	@:access(flixel.system.frontEnds.BitmapFrontEnd._cache)
 	public static function clearStoredMemory()
@@ -83,59 +85,43 @@ class Paths
 		#if !html5 openfl.Assets.cache.clear("songs"); #end
 	}
 
-	public static function freeGraphicsFromMemory()
-	{
-		var protectedGfx:Array<FlxGraphic> = [];
-		function checkForGraphics(spr:Dynamic)
-		{
-			try
-			{
-				var grp:Array<Dynamic> = Reflect.getProperty(spr, 'members');
-				if(grp != null)
-				{
-					//trace('is actually a group');
-					for (member in grp)
-					{
-						checkForGraphics(member);
-					}
-					return;
-				}
-			}
-
-			//trace('check...');
-			try
-			{
-				var gfx:FlxGraphic = Reflect.getProperty(spr, 'graphic');
-				if(gfx != null)
-				{
-					protectedGfx.push(gfx);
-					//trace('gfx added to the list successfully!');
-				}
-			}
-			//catch(haxe.Exception) {}
-		}
-
-		for (member in FlxG.state.members)
-			checkForGraphics(member);
-
-		if(FlxG.state.subState != null)
-			for (member in FlxG.state.subState.members)
-				checkForGraphics(member);
-
-		for (key in currentTrackedAssets.keys())
-		{
-			// if it is not currently contained within the used local assets
-			if (!dumpExclusions.contains(key))
-			{
-				var graphic:FlxGraphic = currentTrackedAssets.get(key);
-				if(!protectedGfx.contains(graphic))
-				{
-					destroyGraphic(graphic); // get rid of the graphic
-					currentTrackedAssets.remove(key); // and remove the key from local cache map
-					//trace('deleted $key');
-				}
-			}
-		}
+	public static function freeGraphicsFromMemory()  
+	{  
+	    protectedGraphicsCache.clear();  
+	    
+	    for (member in FlxG.state.members)  
+	        cacheProtectedGraphics(member);  
+	      
+	    if(FlxG.state.subState != null)  
+	        for (member in FlxG.state.subState.members)  
+	            cacheProtectedGraphics(member);  
+	    
+	    for (key in currentTrackedAssets.keys())  
+	    {  
+	        if (!dumpExclusions.contains(key))  
+	        {  
+	            var graphic:FlxGraphic = currentTrackedAssets.get(key);  
+	            if(!protectedGraphicsCache.exists(graphic))  
+	            {  
+	                destroyGraphic(graphic);  
+	                currentTrackedAssets.remove(key);  
+	            }  
+	        }  
+	    }  
+	}  
+	
+	static function cacheProtectedGraphics(obj:Dynamic)  
+	{  
+	    if(Std.isOfType(obj, FlxSprite)) {  
+	        var spr:FlxSprite = cast obj;  
+	        if(spr.graphic != null)  
+	            protectedGraphicsCache.set(spr.graphic, true);  
+	    }  
+	    else if(Std.isOfType(obj, FlxTypedGroup)) {  
+	        var grp:FlxTypedGroup<Dynamic> = cast obj;  
+	        for(member in grp.members)  
+	            if(member != null) cacheProtectedGraphics(member);  
+	    }  
 	}
 
 	inline static function destroyGraphic(graphic:FlxGraphic)
@@ -434,29 +420,31 @@ class Paths
 	}
 
 	public static var currentTrackedSounds:Map<String, Sound> = [];
-	public static function returnSound(key:String, ?path:String, ?modsAllowed:Bool = true, ?beepOnNull:Bool = true)
-	{
-		var file:String = getPath(Language.getFileTranslation(key) + '.$SOUND_EXT', SOUND, path, modsAllowed);
-
-		//trace('precaching sound: $file');
-		if(!currentTrackedSounds.exists(file))
-		{
-			#if sys
-			if(FileSystem.exists(file))
-				currentTrackedSounds.set(file, Sound.fromFile(file));
-			#else
-			if(OpenFlAssets.exists(file, SOUND))
-				currentTrackedSounds.set(file, OpenFlAssets.getSound(file));
-			#end
-			else if(beepOnNull)
-			{
-				trace('SOUND NOT FOUND: $key, PATH: $path');
-				FlxG.log.error('SOUND NOT FOUND: $key, PATH: $path');
-				return FlxAssets.getSound('flixel/sounds/beep');
-			}
-		}
-		localTrackedAssets.push(file);
-		return currentTrackedSounds.get(file);
+	public static function returnSound(key:String, ?path:String, ?modsAllowed:Bool = true, ?beepOnNull:Bool = true)  
+	{  
+	    var file:String = getPath(Language.getFileTranslation(key) + '.$SOUND_EXT', SOUND, path, modsAllowed);  
+	  
+	    if(!currentTrackedSounds.exists(file))  
+	    {  
+	        #if sys  
+	        if(FileSystem.exists(file))  
+	            currentTrackedSounds.set(file, Sound.fromFile(file));  
+	        #else  
+	        if(OpenFlAssets.exists(file, SOUND))  
+	            currentTrackedSounds.set(file, OpenFlAssets.getSound(file));  
+	        #end  
+	        else if(beepOnNull)  
+	        {  
+	            trace('SOUND NOT FOUND: $key, PATH: $path');  
+	            FlxG.log.error('SOUND NOT FOUND: $key, PATH: $path');  
+	            return FlxAssets.getSound('flixel/sounds/beep');  
+	        }  
+	    }  
+	    
+	    if(!localTrackedAssets.contains(file))  
+	        localTrackedAssets.push(file);  
+	      
+	    return currentTrackedSounds.get(file);  
 	}
 
 	#if MODS_ALLOWED
