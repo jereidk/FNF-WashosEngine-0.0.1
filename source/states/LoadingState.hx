@@ -781,10 +781,10 @@ class LoadingState extends MusicBeatState
 				return FlxAssets.getSound('flixel/sounds/beep');
 			}
 		}
-		mutex.acquire();
-		Paths.localTrackedAssets.push(file);
-		mutex.release();
-
+		mutex.acquire();  
+        if(!Paths.localTrackedAssets.contains(file))  
+            Paths.localTrackedAssets.push(file);  
+        mutex.release();
 		return Paths.currentTrackedSounds.get(file);
 	}
 
