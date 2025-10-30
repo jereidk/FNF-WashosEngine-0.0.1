@@ -217,6 +217,10 @@ class PlayState extends MusicBeatState
 	public var scoreTxt:FlxText;
 	var timeTxt:FlxText;
 	var scoreTxtTween:FlxTween;
+	var lastScoreBopTime:Float = 0;
+
+	var timingTxt:FlxText;  
+    var timingTxtTween:FlxTween;
 
 	public static var campaignScore:Int = 0;
 	public static var campaignMisses:Int = 0;
@@ -570,6 +574,18 @@ class PlayState extends MusicBeatState
 		scoreTxt.borderSize = 1.25;
 		scoreTxt.visible = !ClientPrefs.data.hideHud;
 		uiGroup.add(scoreTxt);
+
+	    timingTxt = new FlxText(0, 0, FlxG.width, "", 16);  
+		timingTxt.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);  
+		timingTxt.scrollFactor.set();  
+		timingTxt.borderSize = 1.25;  
+		timingTxt.visible = !ClientPrefs.data.hideHud;  
+		timingTxt.alpha = 0;
+		if(ClientPrefs.data.downScroll)  
+		    timingTxt.y = FlxG.height * 0.1;
+		else  
+		    timingTxt.y = FlxG.height * 0.9;
+		uiGroup.add(timingTxt);
 
 		botplayTxt = new FlxText(400, healthBar.y - 90, FlxG.width - 800, Language.getPhrase("Botplay").toUpperCase(), 32);
 		botplayTxt.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
@@ -1209,20 +1225,26 @@ class PlayState extends MusicBeatState
 		}
 	}
 
-	public function doScoreBop():Void {
-		if(!ClientPrefs.data.scoreZoom)
-			return;
-
-		if(scoreTxtTween != null)
-			scoreTxtTween.cancel();
-
-		scoreTxt.scale.x = 1.075;
-		scoreTxt.scale.y = 1.075;
-		scoreTxtTween = FlxTween.tween(scoreTxt.scale, {x: 1, y: 1}, 0.2, {
-			onComplete: function(twn:FlxTween) {
-				scoreTxtTween = null;
-			}
-		});
+	public function doScoreBop():Void {  
+	    if(!ClientPrefs.data.scoreZoom)  
+	        return;  
+	    
+	    if(Conductor.songPosition - lastScoreBopTime < 50)  
+	        return;  
+	      
+	    lastScoreBopTime = Conductor.songPosition;  
+	  
+	    if(scoreTxtTween != null)  
+	        scoreTxtTween.cancel();  
+	  
+	    scoreTxt.scale.x = 1.075;  
+	    scoreTxt.scale.y = 1.075;  
+	    scoreTxtTween = FlxTween.tween(scoreTxt.scale, {x: 1, y: 1}, 0.2, {    
+	        ease: FlxEase.elasticOut,  
+	        onComplete: function(twn:FlxTween) {    
+	            scoreTxtTween = null;    
+	        }  
+	    });  
 	}
 
 	public function setSongTime(time:Float)
@@ -1943,6 +1965,17 @@ class PlayState extends MusicBeatState
 		var newPercent:Null<Float> = FlxMath.remapToRange(FlxMath.bound(healthBar.valueFunction(), healthBar.bounds.min, healthBar.bounds.max), healthBar.bounds.min, healthBar.bounds.max, 0, 100);
 		healthBar.percent = (newPercent != null ? newPercent : 0);
 
+	    //healthThing
+        var healthDiff:Float = Math.abs(value - health);  
+		if(healthDiff > 0.1)
+		{  
+		    var scaleBump:Float = 1 + (healthDiff * 0.3);  
+		    if(value < health)
+		        iconP1.scale.set(scaleBump, scaleBump);  
+		    else
+		        iconP2.scale.set(scaleBump, scaleBump);  
+		}
+		
 		iconP1.animation.curAnim.curFrame = (healthBar.percent < 20) ? 1 : 0; //If health is under 20%, change player icon to frame 1 (losing icon), otherwise, frame 0 (normal)
 		iconP2.animation.curAnim.curFrame = (healthBar.percent > 80) ? 1 : 0; //If health is over 80%, change opponent icon to frame 1 (losing icon), otherwise, frame 0 (normal)
 		return health;
@@ -2588,8 +2621,28 @@ class PlayState extends MusicBeatState
 
 	private function popUpScore(note:Note = null):Void
 	{
-		var noteDiff:Float = Math.abs(note.strumTime - Conductor.songPosition + ClientPrefs.data.ratingOffset);
+		var actualDiff:Float = note.strumTime - Conductor.songPosition + ClientPrefs.data.ratingOffset;
+		var noteDiff:Float = Math.abs(actualDiff);
 		vocals.volume = 1;
+		  
+		if(actualDiff < 0) {  
+		    timingTxt.text = "Late: " + Math.abs(Math.floor(actualDiff)) + "ms";  
+		    timingTxt.color = FlxColor.fromRGB(255, 100, 100);  
+		} else {  
+		    timingTxt.text = "Early: " + Math.floor(actualDiff) + "ms";  
+		    timingTxt.color = FlxColor.fromRGB(100, 255, 100);  
+		}  
+		  
+		if(timingTxtTween != null)  
+		    timingTxtTween.cancel();  
+		  
+		timingTxt.alpha = 1;  
+		timingTxtTween = FlxTween.tween(timingTxt, {alpha: 0}, 0.5, {  
+		    startDelay: 0.3,  
+		    onComplete: function(twn:FlxTween) {  
+		        timingTxtTween = null;  
+		    }  
+		});
 
 		if (!ClientPrefs.data.comboStacking && comboGroup.members.length > 0)
 		{
@@ -2643,8 +2696,8 @@ class PlayState extends MusicBeatState
 			rating.x = placement - 40;
 			rating.y -= 60;
 			rating.acceleration.y = 550 * playbackRate * playbackRate;
-			rating.velocity.y -= FlxG.random.int(140, 175) * playbackRate;
-			rating.velocity.x -= FlxG.random.int(0, 10) * playbackRate;
+			rating.velocity.y = FlxG.random.int(140, 175) * playbackRate;
+			rating.velocity.x = FlxG.random.float(-10, 3) * playbackRate;
 			rating.visible = (!ClientPrefs.data.hideHud && showRating);
 			rating.x += ClientPrefs.data.comboOffset[0];
 			rating.y -= ClientPrefs.data.comboOffset[1];
@@ -3205,11 +3258,18 @@ class PlayState extends MusicBeatState
 		}
 	}
 
-	public function spawnNoteSplash(x:Float = 0, y:Float = 0, ?data:Int = 0, ?note:Note, ?strum:StrumNote) {
-		var splash:NoteSplash = grpNoteSplashes.recycle(NoteSplash);
-		splash.babyArrow = strum;
-		splash.spawnSplashNote(x, y, data, note);
-		grpNoteSplashes.add(splash);
+    public function spawnNoteSplash(x:Float = 0, y:Float = 0, ?data:Int = 0, ?note:Note, ?strum:StrumNote) {  
+	    var splash:NoteSplash = grpNoteSplashes.recycle(NoteSplash);  
+	    splash.babyArrow = strum;  
+	    splash.spawnSplashNote(x, y, data, note);  
+	    
+	    var randomScale:Float = FlxG.random.float(0.9, 1.1);  
+	    splash.scale.x *= randomScale;  
+	    splash.scale.y *= randomScale;
+
+		splash.angle = FlxG.random.float(-15, 15);
+	      
+	    grpNoteSplashes.add(splash);  
 	}
 
 	override function destroy() {
