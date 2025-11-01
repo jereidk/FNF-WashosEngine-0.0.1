@@ -37,12 +37,13 @@
 	<set name="BUILD_DIR" value="export/release" unless="debug" />
 	<set name="BUILD_DIR" value="export/32bit" if="32bits" />
 
-	<classpath name="source" />
-
-    <!-- ASTC texture support for mobile -->  
-    <assets path="assets/images" include="*.astc" if="mobile" />  
-    <assets path="mods" include="*.astc" if="mobile" />
-
+	<classpath name="source" />  
+	  
+	<!-- ASTC texture support for mobile -->    
+	<assets path="assets/shared" include="*.astc" if="mobile" />  
+	<assets path="assets/base_game" include="*.astc" if="mobile" />  
+	<assets path="mods" include="*.astc" if="mobile" />  
+	  
 	<assets path="assets/fonts" />
 	<assets path="assets/shared"        exclude="*.ogg" if="web"/>
 	<assets path="assets/shared"        exclude="*.mp3" unless="web"/>
