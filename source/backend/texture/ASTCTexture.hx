@@ -63,7 +63,10 @@ class ASTCTexture {
             var format = getASTCFormat(blockWidth, blockHeight);      
           
             var astcData = data.sub(16, data.length - 16);  
-            var buffer:ArrayBufferView = ArrayBufferView.fromBytes(astcData);
+            var buffer:ArrayBufferView = new ArrayBufferView(astcData.length);  
+			for (i in 0...astcData.length) {  
+			    buffer[i] = astcData.get(i);  
+			}
             GL.compressedTexImage2D(      
                 GL.TEXTURE_2D, 0, format, width, height, 0,  
                 astcData.length,      
