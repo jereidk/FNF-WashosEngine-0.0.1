@@ -1,10 +1,12 @@
+
 <?xml version="1.0" encoding="utf-8"?>
 <project>
 	<app title="WashosEngine" file="WashosEngine" packageName="com.shadowmario.washosengine" package="com.shadowmario.washosengine" main="Main" version="0.2.8" company="ShadowMario" />
 
 	<set name="APP_ID" value="0x0100f6c013bbc000" />
 
-	<haxedef name="LINC_LUA_RELATIVE_DYNAMIC_LIB"/> <app preloader="flixel.system.FlxPreloader" />
+	<haxedef name="LINC_LUA_RELATIVE_DYNAMIC_LIB"/> 
+	<app preloader="flixel.system.FlxPreloader" />
 
 	<set name="SWF_VERSION" value="11.8" />
 	
@@ -17,11 +19,15 @@
 	<define name="COPYSTATE_ALLOWED" if="MODS_ALLOWED mobile"/>
 	<define name="IRIS_DEBUG"/>
 	
-	<define name="MULTITHREADED_LOADING" if="cpp" /> <define name="SHOW_LOADING_SCREEN" />
-	<define name="PSYCH_WATERMARKS"/> <section if="officialBuild">
+	<define name="MULTITHREADED_LOADING" if="cpp" /> 
+	<define name="SHOW_LOADING_SCREEN" />
+	<define name="PSYCH_WATERMARKS"/> 
+	
+	<section if="officialBuild">
 		<define name="TITLE_SCREEN_EASTER_EGG"/>
 		<define name="BASE_GAME_FILES" />
-		<define name="VIDEOS_ALLOWED" if="desktop || mobile" unless="32bits"/> </section>
+		<define name="VIDEOS_ALLOWED" if="desktop || mobile" unless="32bits"/> 
+	</section>
 
 	<window width="1280" height="720" fps="60" background="#000000" hardware="true" vsync="false" allow-high-dpi="true" />
 
@@ -37,11 +43,25 @@
 	<set name="BUILD_DIR" value="export/release" unless="debug" />
 	<set name="BUILD_DIR" value="export/32bit" if="32bits" />
 
-	<classpath name="source" />  
-	  
-	<!-- ASTC texture support for mobile -->    
+	<classpath name="source" />
+	
+	<!-- Optimizaciones específicas de arquitectura ARM -->  
+	<section if="mobile">  
+	    <haxedef name="HXCPP_ARM64" if="android" />  
+	    <haxedef name="HXCPP_ARMV7" if="android" unless="HXCPP_ARM64" />  
+	</section>
+	
+	<!-- Compilación incremental para builds más rápidos -->  
+	<haxeflag name="--times" if="debug" />  
+	<haxeflag name="-D" value="no-inline" if="debug" />  
+	<haxeflag name="-D" value="analyzer-optimize" unless="debug" />  
+	<haxeflag name="-dce" value="full" unless="debug" />  
+	    
+	<!-- ASTC texture support for mobile (fallback cuando no hay PNG) -->  
 	<assets path="assets/shared" include="*.astc" if="mobile" />  
-	<assets path="assets/base_game" include="*.astc" if="mobile" />
+	<assets path="assets/base_game" include="*.astc" if="mobile" />  
+	<assets path="assets/week_assets" include="*.astc" if="mobile" />  
+	<assets path="assets/songs" include="*.astc" if="mobile" />
 	  
 	<assets path="assets/fonts" />
 	<assets path="assets/shared"        exclude="*.ogg" if="web"/>
@@ -53,6 +73,7 @@
 	<assets path="assets/songs"         exclude="*.mp3" unless="web"/>
 	<assets path="assets/week_assets"   rename="assets" exclude="*.ogg" if="web"/>
 	<assets path="assets/week_assets"   rename="assets" exclude="*.mp3" unless="web"/>
+	
 	<section if="TITLE_SCREEN_EASTER_EGG">
 		<assets path="assets/secrets" rename="assets/shared" exclude="*.ogg" if="web"/>
 		<assets path="assets/secrets" rename="assets/shared" exclude="*.mp3"  unless="web"/>
@@ -111,11 +132,20 @@
 
 	<haxedef name="NAPE_RELEASE_BUILD" unless="debug" />
 	
-	<section if="cpp">
-		<haxedef name="HXCPP_CHECK_POINTER" />
-		<haxedef name="HXCPP_STACK_LINE" />
-		<haxedef name="HXCPP_STACK_TRACE" />
-		<haxedef name="HXCPP_CATCH_SEGV" />
+	<section if="cpp">  
+		<haxedef name="HXCPP_CHECK_POINTER" />  
+		<haxedef name="HXCPP_STACK_LINE" />  
+		<haxedef name="HXCPP_STACK_TRACE" />  
+		<haxedef name="HXCPP_CATCH_SEGV" />  
+		  
+		<!-- Compilación incremental de C++ -->  
+		<haxedef name="HXCPP_COMPILE_CACHE" value="~/.hxcpp_cache" />  
+		<haxedef name="HXCPP_COMPILE_THREADS" value="8" />  
+		<haxedef name="HXCPP_LINK_THREADS" value="8" />  
+		  
+		<!-- Optimizaciones de memoria para mobile -->  
+		<haxedef name="HXCPP_GC_GENERATIONAL" if="mobile" />  
+		<haxedef name="HXCPP_GC_BIG_BLOCKS" if="mobile" />  
 	</section>
 	
 	<haxedef name='no-deprecation-warnings' />
