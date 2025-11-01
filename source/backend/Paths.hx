@@ -291,6 +291,20 @@ class Paths
 		return 'assets/$folderKey';
 	}
 
+	#if mobile  
+	inline static public function modsImagesAstc(key:String)  
+	    return modFolders('images/' + key + '.astc');  
+	  
+	static public function hasASTCVersion(key:String, ?parentFolder:String = null):Bool  
+	{  
+	    #if MODS_ALLOWED  
+	    var astcFile:String = modsImagesAstc(key);  
+	    if(FileSystem.exists(astcFile)) return true;  
+	    #end  
+	    return false;  
+	}  
+	#end
+
 	public static function fileExists(key:String, type:AssetType, ?ignoreMods:Bool = false, ?parentFolder:String = null)
 	{
 		#if MODS_ALLOWED
