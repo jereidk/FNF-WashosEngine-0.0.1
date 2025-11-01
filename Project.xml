@@ -39,6 +39,10 @@
 
 	<classpath name="source" />
 
+    <!-- ASTC texture support for mobile -->  
+    <assets path="assets/images" include="*.astc" if="mobile" />  
+    <assets path="mods" include="*.astc" if="mobile" />
+
 	<assets path="assets/fonts" />
 	<assets path="assets/shared"        exclude="*.ogg" if="web"/>
 	<assets path="assets/shared"        exclude="*.mp3" unless="web"/>
