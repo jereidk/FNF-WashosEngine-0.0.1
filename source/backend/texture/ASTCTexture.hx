@@ -94,13 +94,24 @@ class ASTCTexture {
         }  
     }  
   
-    static function checkASTCSupport():Bool {  
-        if (astcSupported != null) return astcSupported;  
-          
-        var extensions:String = GL.getSupportedExtensions();  
-        astcSupported = extensions.indexOf("GL_KHR_texture_compression_astc_ldr") >= 0;  
-        return astcSupported;  
-    }  
+    static function checkASTCSupport():Bool {
+	    if (astcSupported != null) return astcSupported;
+	    astcSupported = false;
+	    try {
+	        var exts = GL.getSupportedExtensions();
+	        if (exts == null) return false;
+	        for (ext in exts) {
+	            var e = ext.toLowerCase();
+	            if (e.indexOf("texture_compression_astc") != -1 || e.indexOf("astc") != -1) {
+	                astcSupported = true;
+	                break;
+	            }
+	        }
+	    } catch (err:Dynamic) {
+	        trace('ASTC check error: $err');
+	    }
+	    return astcSupported;
+	}
   
     static function validateASTCHeader(data:Bytes):Bool {  
         if (data.length < 16) return false;  
