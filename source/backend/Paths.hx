@@ -219,16 +219,79 @@ class Paths
 	public static var currentTrackedAssets:Map<String, FlxGraphic> = [];
 	static public function image(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxGraphic
 	{
-		key = Language.getFileTranslation('images/$key') + '.png';
-		var bitmap:BitmapData = null;
-		if (currentTrackedAssets.exists(key))
-		{
-			localTrackedAssets.push(key);
-			return currentTrackedAssets.get(key);
-		}
-		return cacheBitmap(key, parentFolder, bitmap, allowGPU);
+	    key = Language.getFileTranslation('images/$key') + '.png';
+	    var bitmap:BitmapData = null;
+	    
+	    if (currentTrackedAssets.exists(key))
+	    {
+	        localTrackedAssets.push(key);
+	        return currentTrackedAssets.get(key);
+	    }
+	    
+	    #if mobile
+	    var file:String = getPath(key, IMAGE, parentFolder, true);
+	    #if MODS_ALLOWED
+	    if (!FileSystem.exists(file)) {
+	        var astcKey = key.replace('.png', '.astc');
+	        var astcFile:String = getPath(astcKey, IMAGE, parentFolder, true);
+	        if (FileSystem.exists(astcFile)) {
+	            trace('PNG not found, attempting ASTC fallback: $astcFile');
+	            return loadASTCGraphic(astcFile, astcKey);
+	        }
+	    }
+	    #end
+	    #end
+	    
+	    return cacheBitmap(key, parentFolder, bitmap, allowGPU);
 	}
-
+	
+	#if mobile
+	/**
+	 * Loads an ASTC compressed texture as a FlxGraphic.
+	 * 
+	 * IMPORTANT LIMITATIONS:
+	 * - Pixel operations (getPixel, setPixel, copyPixels) will NOT work
+	 * - The BitmapData is a dummy container for the GPU texture
+	 * - Rendering, animations, shaders, and transformations work normally
+	 * 
+	 * This is by design - ASTC textures stay compressed in GPU memory for
+	 * optimal performance. If you need pixel-level access, use PNG instead.
+	 */
+	static function loadASTCGraphic(astcPath:String, cacheKey:String):FlxGraphic
+	{
+	    try {
+	        var astcTex = new backend.texture.ASTCTexture(astcPath);
+	        
+	        // IMPORTANTE: Esto crea un BitmapData vacío del tamaño correcto
+	        // El rendering real usará la GLTexture directamente
+	        var bitmap:BitmapData = new BitmapData(astcTex.width, astcTex.height, true, 0x00000000);
+	        
+	        // Almacenar referencia a la textura ASTC para uso posterior
+	        @:privateAccess
+	        bitmap.__texture = astcTex.texture;
+	        bitmap.readable = false; // No podemos leer pixels de una textura comprimida
+	        
+	        // Marcar este bitmap como ASTC para debugging
+	        @:privateAccess
+	        bitmap.image = null; // Señal de que este es un bitmap ASTC sin image data
+	
+	        var graph:FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, cacheKey);
+	        graph.persist = true;
+	        graph.destroyOnNoUse = false;
+	        
+	        currentTrackedAssets.set(cacheKey, graph);
+	        localTrackedAssets.push(cacheKey);
+	        
+	        trace('Successfully loaded ASTC texture: ${astcTex.width}x${astcTex.height}');
+	        return graph;
+	    }
+	    catch(e:Dynamic) {
+	        trace('Failed to load ASTC: $e');
+	        return null;
+	    }
+	}
+	#end
+		
 	public static function cacheBitmap(key:String, ?parentFolder:String = null, ?bitmap:BitmapData, ?allowGPU:Bool = true):FlxGraphic
 	{
 		if (bitmap == null)
@@ -291,31 +354,47 @@ class Paths
 		return 'assets/$folderKey';
 	}
 
+	#if mobile  
+	inline static public function modsImagesAstc(key:String)  
+	    return modFolders('images/' + key + '.astc');  
+	  
+	static public function hasASTCVersion(key:String, ?parentFolder:String = null):Bool  
+	{  
+	    #if MODS_ALLOWED  
+	    var astcFile:String = modsImagesAstc(key);  
+	    if(FileSystem.exists(astcFile)) return true;  
+	    #end  
+	    return false;  
+	}  
+	#end
+
 	public static function fileExists(key:String, type:AssetType, ?ignoreMods:Bool = false, ?parentFolder:String = null)
 	{
-		#if MODS_ALLOWED
-		if(!ignoreMods)
-		{
-			var modKey:String = key;
-			if(parentFolder == 'songs') modKey = 'songs/$key';
-
-			for(mod in Mods.getGlobalMods())
-				if (FileSystem.exists(mods('$mod/$modKey')))
-					return true;
-				#if linux
-				else if (FileSystem.exists(findFile('$mod/$modKey')))
-					return true;
-				#end
-
-			if (FileSystem.exists(mods(Mods.currentModDirectory + '/' + modKey)) || FileSystem.exists(mods(modKey)))
-				return true;
-			#if linux
-			else if (FileSystem.exists(findFile(modKey)))
-				return true;
-			#end
-		}
-		#end
-		return (OpenFlAssets.exists(getPath(key, type, parentFolder, false)));
+	    #if MODS_ALLOWED
+	    if(!ignoreMods)
+	    {
+	        var modKey:String = key;
+	        if(parentFolder == 'songs') modKey = 'songs/$key';
+	
+	        for(mod in Mods.getGlobalMods())
+	            if (FileSystem.exists(mods('$mod/$modKey')))
+	                return true;
+	
+	        if (FileSystem.exists(mods(Mods.currentModDirectory + '/' + modKey)) || FileSystem.exists(mods(modKey)))
+	            return true;
+	            
+	        #if mobile
+	        var astcKey = modKey.replace('.png', '.astc');
+	        for(mod in Mods.getGlobalMods())
+	            if (FileSystem.exists(mods('$mod/$astcKey')))
+	                return true;
+	                
+	        if (FileSystem.exists(mods(Mods.currentModDirectory + '/' + astcKey)) || FileSystem.exists(mods(astcKey)))
+	            return true;
+	        #end
+	    }
+	    #end
+	    return (OpenFlAssets.exists(getPath(key, type, parentFolder, false)));
 	}
 
 	static public function getAtlas(key:String, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames

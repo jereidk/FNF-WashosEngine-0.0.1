@@ -1,13 +1,17 @@
 package backend.texture;
 
 import lime.graphics.opengl.GL;
-import lime.graphics.opengl.GLTexture;
+import openfl.display3D.textures.RectangleTexture;
+import openfl.display.BitmapData;
+import openfl.events.Event;
+import flixel.FlxG; 
+
 import lime.utils.ArrayBufferView;
 import sys.io.File;
 import haxe.io.Bytes;
 
 class ASTCTexture {
-    public var texture:GLTexture;
+    public var texture:RectangleTexture; 
     public var width:Int;
     public var height:Int;
     public var blockWidth:Int;
@@ -20,7 +24,6 @@ class ASTCTexture {
 	    
 	    try {    
 	        if (!sys.FileSystem.exists(path)) throw 'ASTC file not found: $path';    
-	    
 	        var data:Bytes = File.getBytes(path);    
 	        if (data == null || data.length < 16) throw 'Invalid ASTC file: $path';    
 	        if (!validateASTCHeader(data)) throw 'Invalid ASTC header: $path';    
@@ -35,29 +38,27 @@ class ASTCTexture {
 	    
 	        trace('Loading ASTC: $path (${width}x${height}, block ${blockWidth}x${blockHeight})');    
 	    
-	        this.texture = GL.createTexture();    
-	        if (this.texture == null) throw "Failed to create GL texture";    
+	        var context = FlxG.stage.context3D;
+	        this.texture = context.createRectangleTexture(width, height, BGRA, false);
+
+            @:privateAccess
+            var glTexture:lime.graphics.opengl.GLTexture = texture.__textureID;
 	    
-	        GL.bindTexture(GL.TEXTURE_2D, texture);    
+	        GL.bindTexture(GL.TEXTURE_2D, glTexture);
 	        var format = getASTCFormat(blockWidth, blockHeight);    
 	    
-	        // Nota: Verifica que tu versión de Lime soporte 3 parámetros    
 	        GL.compressedTexImage2D(    
-	            GL.TEXTURE_2D,    
-	            0,    
-	            format,    
-	            width,    
-	            height,    
-	            0,    
+	            GL.TEXTURE_2D, 0, format, width, height, 0,
 	            data.length - 16,    
-	            new ArrayBufferView(data, 16) // Si falla, quita el tercer parámetro    
+	            new ArrayBufferView(data, 16)
 	        );    
 	    
 	        GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);    
 	        GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR);    
 	        GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);    
 	        GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);    
-	        GL.bindTexture(GL.TEXTURE_2D, null);    
+	        GL.bindTexture(GL.TEXTURE_2D, null);
+
 	    }    
 	    catch (e:Dynamic) {    
 	        trace('Error loading ASTC texture from $path: $e');    
@@ -68,7 +69,7 @@ class ASTCTexture {
 
     public function dispose():Void {
         if (texture != null) {
-            GL.deleteTexture(texture);
+            texture.dispose(); 
             texture = null;
         }
     }
