@@ -3,14 +3,14 @@ package backend.texture;
 import lime.graphics.opengl.GL;  
 import openfl.display3D.textures.RectangleTexture;  
 import openfl.display.BitmapData;  
-import flixel.FlxG;   
+import flixel.FlxG;  
   
 import lime.utils.ArrayBufferView;  
+import lime.utils.UInt8Array;
 import sys.io.File;  
 import haxe.io.Bytes;  
   
-class ASTCTexture {  
-    // Definir constantes ASTC manualmente (Lime no las incluye)  
+class ASTCTexture {
     static inline var COMPRESSED_RGBA_ASTC_4x4_KHR:Int = 0x93B0;  
     static inline var COMPRESSED_RGBA_ASTC_5x4_KHR:Int = 0x93B1;  
     static inline var COMPRESSED_RGBA_ASTC_5x5_KHR:Int = 0x93B2;  
@@ -26,7 +26,7 @@ class ASTCTexture {
     static inline var COMPRESSED_RGBA_ASTC_12x10_KHR:Int = 0x93BC;  
     static inline var COMPRESSED_RGBA_ASTC_12x12_KHR:Int = 0x93BD;  
   
-    public var texture:RectangleTexture;   
+    public var texture:RectangleTexture;  
     public var width:Int;  
     public var height:Int;  
     public var blockWidth:Int;  
@@ -34,101 +34,98 @@ class ASTCTexture {
   
     static var astcSupported:Null<Bool> = null;  
   
-    public function new(path:String, ?manualWidth:Int, ?manualHeight:Int) {      
-        if (!checkASTCSupport()) throw "ASTC textures not supported on this device";      
+    public function new(path:String, ?manualWidth:Int, ?manualHeight:Int) {  
+        if (!checkASTCSupport()) throw "ASTC textures not supported on this device";  
           
-        try {      
-            if (!sys.FileSystem.exists(path)) throw 'ASTC file not found: $path';      
-            var data:Bytes = File.getBytes(path);      
-            if (data == null || data.length < 16) throw 'Invalid ASTC file: $path';      
-            if (!validateASTCHeader(data)) throw 'Invalid ASTC header: $path';      
-          
-            var dims = readASTCDimensions(data);      
-            this.width = manualWidth != null ? manualWidth : dims.width;      
-            this.height = manualHeight != null ? manualHeight : dims.height;      
-            this.blockWidth = dims.blockWidth;      
-            this.blockHeight = dims.blockHeight;      
-          
-            if (width <= 0 || height <= 0) throw 'Invalid dimensions: ${width}x${height}';      
-          
-            trace('Loading ASTC: $path (${width}x${height}, block ${blockWidth}x${blockHeight})');      
-          
+        try {  
+            if (!sys.FileSystem.exists(path)) throw 'ASTC file not found: $path';  
+            var data:Bytes = File.getBytes(path);  
+            if (data == null || data.length < 16) throw 'Invalid ASTC file: $path';  
+            if (!validateASTCHeader(data)) throw 'Invalid ASTC header: $path';  
+  
+            var dims = readASTCDimensions(data);  
+            this.width = manualWidth != null ? manualWidth : dims.width;  
+            this.height = manualHeight != null ? manualHeight : dims.height;  
+            this.blockWidth = dims.blockWidth;  
+            this.blockHeight = dims.blockHeight;  
+  
+            if (this.width <= 0 || this.height <= 0)   
+                throw 'Invalid ASTC dimensions: ${this.width}x${this.height}';  
+  
             var context = FlxG.stage.context3D;  
             this.texture = context.createRectangleTexture(width, height, BGRA, false);  
   
             @:privateAccess  
             var glTexture:lime.graphics.opengl.GLTexture = texture.__textureID;  
-          
-            GL.bindTexture(GL.TEXTURE_2D, glTexture);  
-            var format = getASTCFormat(blockWidth, blockHeight);      
-          
-            var astcData = data.sub(16, data.length - 16);  
-            var buffer:ArrayBufferView = new ArrayBufferView(astcData.length);  
-			for (i in 0...astcData.length) {  
-			    buffer[i] = astcData.get(i);  
-			}
-            GL.compressedTexImage2D(      
-                GL.TEXTURE_2D, 0, format, width, height, 0,  
-                astcData.length,      
-                buffer
-            );      
-          
-            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);      
-            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR);      
-            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_S, GL.CLAMP_TO_EDGE);      
-            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_WRAP_T, GL.CLAMP_TO_EDGE);      
-            GL.bindTexture(GL.TEXTURE_2D, null);  
   
-        }      
-        catch (e:Dynamic) {      
-            trace('Error loading ASTC texture from $path: $e');      
-            dispose();      
-            throw e;      
-        }      
+            var astcData:Bytes = data.sub(16, data.length - 16);  
+            
+            var buffer:UInt8Array = new UInt8Array(astcData.length);  
+            for (i in 0...astcData.length) {  
+                buffer[i] = astcData.get(i);  
+            }  
+  
+            GL.bindTexture(GL.TEXTURE_2D, glTexture);  
+            GL.compressedTexImage2D(  
+                GL.TEXTURE_2D,  
+                0,  
+                getASTCFormat(blockWidth, blockHeight),  
+                width,  
+                height,  
+                0,  
+                astcData.length,  
+                buffer  
+            );  
+  
+            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);  
+            GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MAG_FILTER, GL.LINEAR);  
+            GL.bindTexture(GL.TEXTURE_2D, null);  
+        }  
+        catch(e:Dynamic) {  
+            dispose();  
+            throw e;  
+        }  
     }  
   
     public function dispose():Void {  
         if (texture != null) {  
-            texture.dispose();   
+            texture.dispose();  
             texture = null;  
         }  
     }  
   
     static function checkASTCSupport():Bool {  
         if (astcSupported != null) return astcSupported;  
-  
-        #if (android || ios)  
-        var extensions = GL.getSupportedExtensions();  
-        if (extensions == null) {  
-            astcSupported = false;  
-            return false;  
-        }  
-        astcSupported = extensions.indexOf("GL_KHR_texture_compression_astc_ldr") >= 0 ||  
-                        extensions.indexOf("GL_OES_texture_compression_astc") >= 0;  
-        #else  
-        astcSupported = false;  
-        #end  
-  
-        trace('ASTC support: $astcSupported');  
+          
+        var extensions:String = GL.getSupportedExtensions();  
+        astcSupported = extensions.indexOf("GL_KHR_texture_compression_astc_ldr") >= 0;  
         return astcSupported;  
     }  
   
     static function validateASTCHeader(data:Bytes):Bool {  
         if (data.length < 16) return false;  
-        var magic = data.get(0) | (data.get(1) << 8) | (data.get(2) << 16) | (data.get(3) << 24);  
+        var magic:Int = data.getInt32(0);  
         return magic == 0x5CA1AB13;  
     }  
   
     static function readASTCDimensions(data:Bytes):{width:Int, height:Int, blockWidth:Int, blockHeight:Int} {  
-        var blockX = data.get(4);  
-        var blockY = data.get(5);  
-        var width = data.get(7) | (data.get(8) << 8) | (data.get(9) << 16);  
-        var height = data.get(10) | (data.get(11) << 8) | (data.get(12) << 16);  
-        return {width: width, height: height, blockWidth: blockX, blockHeight: blockY};  
+        var blockWidth:Int = data.get(4);  
+        var blockHeight:Int = data.get(5);  
+        var blockDepth:Int = data.get(6);  
+          
+        var width:Int = data.get(7) | (data.get(8) << 8) | (data.get(9) << 16);  
+        var height:Int = data.get(10) | (data.get(11) << 8) | (data.get(12) << 16);  
+          
+        return {  
+            width: width,  
+            height: height,  
+            blockWidth: blockWidth,  
+            blockHeight: blockHeight  
+        };  
     }  
   
     static function getASTCFormat(blockWidth:Int, blockHeight:Int):Int {  
-        return switch [blockWidth, blockHeight] {  
+        return switch([blockWidth, blockHeight]) {  
             case [4, 4]: COMPRESSED_RGBA_ASTC_4x4_KHR;  
             case [5, 4]: COMPRESSED_RGBA_ASTC_5x4_KHR;  
             case [5, 5]: COMPRESSED_RGBA_ASTC_5x5_KHR;  
