@@ -41,8 +41,7 @@
 	  
 	<!-- ASTC texture support for mobile -->    
 	<assets path="assets/shared" include="*.astc" if="mobile" />  
-	<assets path="assets/base_game" include="*.astc" if="mobile" />  
-	<assets path="mods" include="*.astc" if="mobile" />  
+	<assets path="assets/base_game" include="*.astc" if="mobile" />
 	  
 	<assets path="assets/fonts" />
 	<assets path="assets/shared"        exclude="*.ogg" if="web"/>
