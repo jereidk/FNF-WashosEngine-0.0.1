@@ -62,12 +62,12 @@ class ASTCTexture {
             GL.bindTexture(GL.TEXTURE_2D, glTexture);  
             var format = getASTCFormat(blockWidth, blockHeight);      
           
-            // era: ArrayBufferView(length, offset, data)  
             var astcData = data.sub(16, data.length - 16);  
+            var buffer:ArrayBufferView = ArrayBufferView.fromBytes(astcData);
             GL.compressedTexImage2D(      
                 GL.TEXTURE_2D, 0, format, width, height, 0,  
                 astcData.length,      
-                new ArrayBufferView(astcData.length, 0, astcData)  
+                buffer
             );      
           
             GL.texParameteri(GL.TEXTURE_2D, GL.TEXTURE_MIN_FILTER, GL.LINEAR);      
