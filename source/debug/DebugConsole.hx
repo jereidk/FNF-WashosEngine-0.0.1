@@ -13,6 +13,13 @@ import haxe.Timer;
 import android.widget.Toast as AndroidToast;
 #end
 
+enum LogLevel {  
+    INFO;  
+    WARNING;  
+    ERROR;  
+    FATAL;  
+}
+
 class DebugConsole extends FlxGroup
 {
     var toggleButton:FlxSprite;
@@ -176,33 +183,49 @@ class DebugConsole extends FlxGroup
         add(clearButtonText);
     }
     
-    function hookTrace():Void
-    {
-        var originalTrace = haxe.Log.trace;
-        haxe.Log.trace = function(v:Dynamic, ?infos:haxe.PosInfos) {
-            originalTrace(v, infos);
-            addLog(Std.string(v), FlxColor.WHITE, infos);
-        };
-    }
+    function hookTrace():Void  
+	{  
+	    var originalTrace = haxe.Log.trace;  
+	    haxe.Log.trace = function(v:Dynamic, ?infos:haxe.PosInfos) {  
+	        originalTrace(v, infos);  
+	          
+	        var location = "";  
+	        if (infos != null)  
+	            location = '${infos.fileName}:${infos.lineNumber}';  
+	          
+	        var entry:LogEntry = {  
+	            timestamp: getTimestamp(),  
+	            text: Std.string(v),  
+	            level: INFO,  
+	            location: location  
+	        };  
+	        logs.push(entry);  
+	          
+	        if (logs.length > MAX_LOGS)  
+	            logs.shift();  
+	          
+	        updateConsoleText();  
+	    };  
+	}
     
-    function addLog(text:String, color:FlxColor, ?infos:haxe.PosInfos):Void
-    {
-        var location = "";
-        if (infos != null)
-            location = '${infos.fileName}:${infos.lineNumber}';
-        
-        logs.push({
-            timestamp: getTimestamp(),
-            text: text,
-            color: color,
-            location: location
-        });
-        
-        if (logs.length > MAX_LOGS)
-            logs.shift();
-        
-        updateConsoleText();
-    }
+    public function addLog(text:String, level:LogLevel, ?infos:haxe.PosInfos):Void  
+	{  
+	    var location = "";  
+	    if (infos != null)  
+	        location = '${infos.fileName}:${infos.lineNumber}';  
+	      
+	    logs.push({  
+	        timestamp: getTimestamp(),  
+	        text: text,  
+	        level: level,  // Ahora usa LogLevel directamente  
+	        location: location  
+	    });  
+	      
+	    if (logs.length > MAX_LOGS)  
+	        logs.shift();  
+	      
+	    updateConsoleText();  
+	}
     
     function toggleConsole():Void
     {
@@ -221,62 +244,74 @@ class DebugConsole extends FlxGroup
             updateConsoleText();
     }
     
-    function updateConsoleText():Void
-    {
-        if (logs.length == 0)
-        {
-            consoleText.text = "No logs yet...";
-            logCountText.text = "Logs: 0";
-            maxScrollY = 0;
-            return;
-        }
-        
-        logCountText.text = 'Logs: ${logs.length}';
-        
-        var displayText = "";
-        var lineHeight = 12;
-        var maxVisibleLines = Std.int((PANEL_HEIGHT - 100) / lineHeight);
-        
-        var startIndex = Std.int(logScrollY / lineHeight);
-        var endIndex = Std.int(Math.min(startIndex + maxVisibleLines, logs.length));
-        
-        for (i in startIndex...endIndex)
-        {
-            var log = logs[i];
-            displayText += '[${log.timestamp}] ${log.text}\n';
-            if (log.location != "")
-                displayText += '  @ ${log.location}\n';
-        }
-        
-        consoleText.text = displayText;
-        
-        var totalLines = logs.length * 2;
-        maxScrollY = Math.max(0, (totalLines - maxVisibleLines) * lineHeight);
-    }
+    function updateConsoleText():Void  
+	{  
+	    if (logs.length == 0)  
+	    {  
+	        consoleText.text = "No logs yet...";  
+	        logCountText.text = "Logs: 0";  
+	        maxScrollY = 0;  
+	        return;  
+	    }  
+	      
+	    logCountText.text = 'Logs: ${logs.length}';  
+	      
+	    var displayText = "";  
+	    var lineHeight = 12;  
+	    var maxVisibleLines = Std.int((PANEL_HEIGHT - 100) / lineHeight);  
+	      
+	    var startIndex = Std.int(logScrollY / lineHeight);  
+	    var endIndex = Std.int(Math.min(startIndex + maxVisibleLines, logs.length));  
+	      
+	    for (i in startIndex...endIndex)  
+	    {  
+	        var log = logs[i];  
+	        var levelPrefix = switch(log.level) {  
+	            case INFO: "[INFO]";  
+	            case WARNING: "[WARN]";  
+	            case ERROR: "[ERROR]";  
+	            case FATAL: "[FATAL]";  
+	        }  
+	        displayText += '[${log.timestamp}] $levelPrefix ${log.text}\n';  
+	        if (log.location != "")  
+	            displayText += '  @ ${log.location}\n';  
+	    }  
+	      
+	    consoleText.text = displayText;  
+	      
+	    var totalLines = logs.length * 2;  
+	    maxScrollY = Math.max(0, (totalLines - maxVisibleLines) * lineHeight);  
+	}
     
-    function copyLogsToClipboard():Void
-    {
-        var fullText = "";
-        for (log in logs)
-        {
-            fullText += '[${log.timestamp}] ${log.text}';
-            if (log.location != "")
-                fullText += ' @ ${log.location}';
-            fullText += '\n';
-        }
-        
-        #if android
-        try {
-            System.setClipboard(fullText);
-            AndroidToast.makeText("Logs copied to clipboard!", AndroidToast.LENGTH_SHORT);
-        } catch (e:Dynamic) {
-            trace('Failed to copy to clipboard: $e');
-        }
-        #else
-        System.setClipboard(fullText);
-        trace('Logs copied to clipboard!');
-        #end
-    }
+    function copyLogsToClipboard():Void  
+	{  
+	    var fullText = "";  
+	    for (log in logs)  
+	    {  
+	        var levelPrefix = switch(log.level) {  
+	            case INFO: "[INFO]";  
+	            case WARNING: "[WARN]";  
+	            case ERROR: "[ERROR]";  
+	            case FATAL: "[FATAL]";  
+	        }  
+	        fullText += '[${log.timestamp}] $levelPrefix ${log.text}';  
+	        if (log.location != "")  
+	            fullText += ' @ ${log.location}';  
+	        fullText += '\n';  
+	    }  
+	      
+	    #if android  
+	    try {  
+	        System.setClipboard(fullText);  
+	        AndroidToast.makeText("Logs copied to clipboard!", AndroidToast.LENGTH_SHORT);  
+	    } catch (e:Dynamic) {  
+	        trace('Failed to copy to clipboard: $e');  
+	    }  
+	    #else  
+	    System.setClipboard(fullText);  
+	    trace('Logs copied to clipboard!');  
+	    #end  
+	}
     
     function clearLogs():Void
     {
@@ -295,9 +330,9 @@ class DebugConsole extends FlxGroup
     }
 }
 
-typedef LogEntry = {
-    var timestamp:String;
-    var text:String;
-    var color:FlxColor;
-    var location:String;
+typedef LogEntry = {  
+    var timestamp:String;  
+    var text:String;  
+    var level:LogLevel;  // Cambiar de FlxColor a LogLevel  
+    var location:String;  
 }
