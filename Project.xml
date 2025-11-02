@@ -45,12 +45,6 @@
 
 	<classpath name="source" />
 	
-	<!-- Optimizaciones específicas de arquitectura ARM -->  
-	<section if="mobile">  
-	    <haxedef name="HXCPP_ARM64" if="android" />  
-	    <haxedef name="HXCPP_ARMV7" if="android" unless="HXCPP_ARM64" />  
-	</section>
-	
 	<!-- Compilación incremental para builds más rápidos -->  
 	<haxeflag name="--times" if="debug" />  
 	<haxeflag name="-D" value="no-inline" if="debug" />  
