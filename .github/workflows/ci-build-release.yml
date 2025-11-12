@@ -1,0 +1,223 @@
+name: CI - Build & Release (unified)
+
+on:
+  workflow_dispatch:
+    inputs:
+      create_release:
+        description: 'Create GitHub release with artifacts (true/false)'
+        required: false
+        default: 'true'
+      run_lock:
+        description: 'Lock closed issues after run (true/false)'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: write
+  issues: write
+
+env:
+  HAXE_VERSION: 4.3.6
+  PROJECT_NAME: WashosEngine
+
+jobs:
+  get-commit-hash:
+    name: Get commit short hash
+    runs-on: ubuntu-latest
+    outputs:
+      commit_hash: ${{ steps.get_commit_hash.outputs.commit_hash }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get latest commit short hash
+        id: get_commit_hash
+        run: |
+          commit_hash=${GITHUB_SHA::7}
+          echo "Commit short hash: $commit_hash"
+          echo "commit_hash=$commit_hash" >> $GITHUB_OUTPUT
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: get-commit-hash
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-2022
+            buildArgs: windows
+            setupCommand: .\setup\windows.bat
+            artifactName: windowsBuild-x86_64
+            artifactPath: export/release/windows/bin/*
+          - name: Linux
+            os: ubuntu-22.04
+            buildArgs: linux
+            setupCommand: sh ./setup/unix.sh
+            artifactName: linuxBuild-x86_64
+            artifactPath: export/release/linux/bin/*
+          - name: macOS x86_64
+            os: macos-15
+            buildArgs: "mac -64 -D HXCPP_M64"
+            setupCommand: sh ./setup/unix.sh
+            artifactName: macOSBuild-x86_64
+            artifactPath: export/release/macos/bin/*
+          - name: macOS ARM64
+            os: macos-15
+            buildArgs: "mac -arm64 -D HXCPP_ARM64"
+            setupCommand: sh ./setup/unix.sh
+            artifactName: macOSBuild-arm64
+            artifactPath: export/release/macos/bin/*
+          - name: Android
+            os: macos-15
+            buildArgs: "android -ONLY_ARMV7"
+            setupCommand: sh ./setup/unix.sh
+            artifactName: androidBuild
+            artifactPath: "export/release/android/bin/app/build/outputs/apk/release/*.apk"
+          - name: iOS
+            os: macos-15
+            buildArgs: "ios -nosign -D officialBuild"
+            setupCommand: sh ./setup/unix.sh
+            artifactName: iOSBuild
+            artifactPath: "export/release/ios/build/Release-iphoneos/*.ipa"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@master
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+
+      - name: Setup Android NDK (Android only)
+        if: ${{ matrix.name == 'Android' }}
+        id: setup-ndk
+        uses: nttld/setup-ndk@main
+        with:
+          ndk-version: r27c
+          add-to-path: false
+
+      - name: Install libVLC (Linux only)
+        if: ${{ matrix.name == 'Linux' }}
+        run: sudo apt-get update && sudo apt-get install -y libvlc-dev libvlccore-dev
+
+      - name: Cache Dependencies
+        uses: actions/cache@v3
+        with:
+          path: |
+            ~/haxelib
+            ~/.haxelib
+            ~/.hxcpp_cache
+          key: ${{ runner.os }}-${{ matrix.name }}-haxelib-${{ hashFiles('**/setup/*.sh', '**/setup/*.bat', 'Project.xml') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.name }}-haxelib-
+            ${{ runner.os }}-${{ matrix.name }}-
+
+      - name: Install Libraries / Setup deps
+        run: ${{ matrix.setupCommand }}
+
+      - name: Configure Android (if Android)
+        if: ${{ matrix.name == 'Android' }}
+        run: |
+          set -e
+          echo "Configuring Android SDK/NDK for lime/haxelib"
+          haxelib run lime config ANDROID_SDK $ANDROID_HOME || true
+          haxelib run lime config ANDROID_NDK_ROOT ${{ steps.setup-ndk.outputs['ndk-path'] }} || true
+          if [ -n "$JAVA_HOME_17_arm64" ]; then
+            haxelib run lime config JAVA_HOME $JAVA_HOME_17_arm64 || true
+          elif [ -n "$JAVA_HOME" ]; then
+            haxelib run lime config JAVA_HOME $JAVA_HOME || true
+          fi
+          haxelib run lime config ANDROID_SETUP true || true
+
+      - name: Compile
+        run: haxelib run lime build ${{ matrix.buildArgs }}
+
+      - name: Make IPA (iOS only)
+        if: ${{ matrix.name == 'iOS' }}
+        run: |
+          brew install ldid || true
+          APP_DIR="export/release/ios/build/Release-iphoneos/${PROJECT_NAME}.app"
+          if [ -d "$APP_DIR" ]; then
+            cd export/release/ios/build/Release-iphoneos
+            ldid -S../../../${PROJECT_NAME}/${PROJECT_NAME}.entitlements ${PROJECT_NAME} || true
+            mkdir -p Payload
+            mv ${PROJECT_NAME}.app Payload || true
+            zip -r ${PROJECT_NAME}.ipa Payload || true
+            mv ${PROJECT_NAME}.ipa $GITHUB_WORKSPACE || true
+            cd $GITHUB_WORKSPACE
+          else
+            echo "No app dir found at $APP_DIR — skipping ipa packaging"
+          fi
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.artifactName }}
+          path: ${{ matrix.artifactPath }}
+          if-no-files-found: error
+
+  release:
+    name: Publish Release
+    needs: build
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.create_release != 'false' }}
+    permissions:
+      contents: write
+    steps:
+      - name: Download all build artifacts
+        uses: actions/download-artifact@v3
+        with:
+          path: ./artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release_files
+          # copy all artifacts into release_files
+          find artifacts -type f -maxdepth 3 -print -exec cp {} release_files/ \; || true
+          echo "Files prepared in release_files:"
+          ls -la release_files || true
+
+      - name: (Optional) Zip iOS .ipa into a single archive (if present)
+        run: |
+          if ls release_files/*.ipa 1> /dev/null 2>&1; then
+            for f in release_files/*.ipa; do
+              base=$(basename "$f" .ipa)
+              zip -j "release_files/${base}.zip" "$f"
+            done
+          fi
+
+      - name: Create GitHub Release and upload artifacts
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release_files/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # name/tag: use short commit hash from get-commit-hash
+          name: DevBuild ${{ needs.get-commit-hash.outputs.commit_hash }}
+          tag_name: devbuild-${{ needs.get-commit-hash.outputs.commit_hash }}
+          prerelease: true
+
+  lock-closed-issues:
+    name: Lock closed issues (optional)
+    runs-on: ubuntu-latest
+    if: ${{ github.event.inputs.run_lock == 'true' }}
+    permissions:
+      issues: write
+    steps:
+      - name: Install jq & curl
+        run: sudo apt-get update && sudo apt-get install -y jq curl
+
+      - name: Lock closed issues
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Locking closed issues in repo: $GITHUB_REPOSITORY"
+          issues=$(curl -s -H "Authorization: token ${GITHUB_TOKEN}" "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues?state=closed&per_page=100" | jq -r '.[] | .number')
+          for issue in $issues; do
+            echo "Locking issue #$issue"
+            curl -s -X PUT -H "Authorization: token ${GITHUB_TOKEN}" -d '{"locked":true}' "https://api.github.com/repos/${GITHUB_REPOSITORY}/issues/$issue/lock"
+          done
